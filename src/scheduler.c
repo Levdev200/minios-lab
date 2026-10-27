@@ -97,6 +97,7 @@ void scheduler_stop(void) {
 }
 
 
+
 // ============================================================
 // [TODO 1/4] scheduler_create_process
 // ------------------------------------------------------------
@@ -111,16 +112,50 @@ void scheduler_stop(void) {
 int scheduler_create_process(const char *path, const char *arg) {
     // Paso 1. Validar que hay espacio en process_table.
     //         Si process_count >= MAX_PROCESSES, imprimir error y retornar -1.
+    //DONE
+    if (process_count>=MAX_PROCESSES)
+    {
+        return -1;
+    }
 
     // Paso 2. Llamar fork() y guardar el resultado en una variable pid_t.
     //         Si fork() retorna < 0, es error: perror("fork") y retornar -1.
+    pid_t pid;
 
+    pid = fork();
+    
+
+    if (pid < 0)
+    {
+        perror("Hubo un problema con el fork");
+        return -1;
     // Paso 3. Si estamos en el HIJO (pid == 0):
-    //         a) Si platform_uses_ptrace() retorna verdadero, llamar platform_trace_child().
-    //            (En macOS esto es no-op; en Linux habilita ptrace.)
-    //         b) Llamar execl(path, path, arg, NULL) si arg != NULL,
+    } else if (pid == 0) {
+
+        //         a) Si platform_uses_ptrace() retorna verdadero, llamar platform_trace_child().
+        if (platform_uses_ptrace == 1)
+        {
+            platform_trace_child();
+        }
+    //    b) Llamar execl(path, path, arg, NULL) si arg != NULL,
     //            o execl(path, path, NULL) si arg == NULL.
+        if (arg != NULL)
+        {
+            execl(path, path, arg, NULL);
+        } else {
+            execl(path, path, NULL);
+        }
+        
     //         c) Si execl retorna, falló: perror("execl") y _exit(1).
+        perror("Algo fallo en execl");
+        _exit(1);
+        
+    }
+    
+
+    
+
+    
 
     // Paso 4. Si estamos en el PADRE (pid > 0) Y platform_uses_ptrace() es verdadero:
     //         a) waitpid(pid, &status, 0) para esperar el SIGTRAP post-exec.
