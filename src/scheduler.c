@@ -121,6 +121,7 @@ int scheduler_create_process(const char *path, const char *arg) {
     // Paso 2. Llamar fork() y guardar el resultado en una variable pid_t.
     //         Si fork() retorna < 0, es error: perror("fork") y retornar -1.
     pid_t pid;
+    int status;
 
     pid = fork();
     
@@ -133,7 +134,7 @@ int scheduler_create_process(const char *path, const char *arg) {
     } else if (pid == 0) {
 
         //         a) Si platform_uses_ptrace() retorna verdadero, llamar platform_trace_child().
-        if (platform_uses_ptrace == 1)
+        if (platform_uses_ptrace())
         {
             platform_trace_child();
         }
@@ -150,47 +151,80 @@ int scheduler_create_process(const char *path, const char *arg) {
         perror("Algo fallo en execl");
         _exit(1);
         
-    }
-    
-
-    
-
-    
-
+    } else { //Proceso padre
     // Paso 4. Si estamos en el PADRE (pid > 0) Y platform_uses_ptrace() es verdadero:
+        if (platform_uses_ptrace())
+        {
     //         a) waitpid(pid, &status, 0) para esperar el SIGTRAP post-exec.
     //         b) Verificar WIFSTOPPED(status). Si no está detenido: matar al hijo y retornar -1.
+            waitpid(pid, &status, 0);
+            
+            if (!WIFSTOPPED(status))
+            {
+                kill(pid, SIGKILL);
+                return -1;
+            }
+            
+        }
+        
+    }
 
     // Paso 5. Crear la entrada en el PCB:
     //         - Calcular idx = process_count (índice libre en la tabla)
+    int idx = process_count;
     //         - Obtener nombre corto con basename() sobre una copia de path
+    char *path_copy = strdup(path);
+    char *short_name = basename(path_copy);
     //         - Llamar pcb_init(&process_table[idx], pid, short_name)
+    pcb_init(&process_table[idx], pid, short_name);
     //         - Liberar la copia del path
-    //
-    //         Ejemplo:
-    //             char *path_copy = strdup(path);
-    //             char *short_name = basename(path_copy);
-    //             pcb_init(&process_table[idx], pid, short_name);
-    //             free(path_copy);
+    free(path_copy);
 
-    // Paso 6. (Solo si platform_uses_ptrace()) Intentar capturar registros iniciales:
+    // Paso 6. (Solo si platform_uses_ptrace()) Intentar capturar registros iniciales
+    if (platform_uses_ptrace())
+    {
     //         a) Si platform_get_registers(pid, &process_table[idx].registers) retorna 0,
     //            marcar process_table[idx].regs_valid = 1.
-    //         b) Llamar platform_detach(pid) para liberar el tracing.
+        if (!platform_get_registers(pid, &process_table[idx].registers))
+        {
+            process_table[idx].regs_valid = 1;
+        }
+        //         b) Llamar platform_detach(pid) para liberar el tracing.
+        platform_detach(pid);
+    }
 
     // Paso 7. Detener el proceso con platform_stop_process(pid).
     //         Si falla: perror, matar, retornar -1.
-
+    if (platform_stop_process(pid))
+    {
+        perror("hubo un error en stop PID");
+        kill(pid, SIGKILL);
+        return -1;
+    }
+    
+    
     // Paso 8. waitpid(pid, &status, WUNTRACED) para confirmar que se detuvo.
     //         Si falla: perror, matar, retornar -1.
-
+    if (waitpid(pid, &status, WUNTRACED)) {
+        perror("waitpid");
+        kill(pid, SIGKILL);
+        return -1;
+    }
     // Paso 9. Marcar el PCB como PROC_READY, incrementar process_count,
     //         llamar rq_enqueue(idx), emitir monitor_emit_created(pid, name)
+    
+    process_table[idx].state = PROC_READY;
+    process_count++;
+    rq_enqueue(idx);
+    monitor_emit_created(process_table[idx].pid, process_table[idx].name);
     //         y si regs_valid, monitor_emit_registers(pid, pc, sp).
+    if (process_table[idx].regs_valid)
+    {
+        monitor_emit_registers(process_table[idx].pid, process_table[idx].registers.program_counter, process_table[idx].registers.stack_pointer);
+    }
+    
     //         Retornar idx.
-
-    (void)path; (void)arg;  // silence unused warnings while unimplemented
-    return -1;  // TODO: reemplazar por idx real
+    return idx;
 }
 
 
