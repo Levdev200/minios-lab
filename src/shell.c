@@ -291,12 +291,23 @@ static void cmd_ps(void) {
 // ============================================================
 static void cmd_kill_proc(const char *arg) {
     // Paso 1. Si arg es NULL o vacio, imprimir "Uso: kill <pid>" y retornar.
-
+    if (arg == NULL)
+    {
+        printf("Uso: kill <pid>\n"); 
+        return;
+    }
     // Paso 2. Convertir arg a entero con atoi. Si <= 0, imprimir "PID invalido"
     //         y retornar.
+    int PID = atoi(arg);
 
+    if (PID <= 0)
+    {
+        printf("PID invalido");
+        return;
+    }
+    
     // Paso 3. block_alarm() para proteger la lectura/modificacion.
-
+    block_alarm();
     // Paso 4. Buscar el PID en process_table (loop por process_count):
     //         - Si process_table[i].pid == target_pid Y estado != PROC_TERMINATED:
     //           a) kill(target_pid, SIGKILL);
@@ -305,12 +316,22 @@ static void cmd_kill_proc(const char *arg) {
     //           d) rq_remove(i);  // sacar de la ready queue
     //           e) imprimir "Proceso PID <pid> terminado."
     //           f) break;
-
+    int status;
+    for (int i = 0; i < process_count; i++) {
+        if (process_table[i].pid == PID && process_table[i].state != PROC_TERMINATED) {
+            kill(PID, SIGKILL);
+            waitpid(PID, &status, 0);
+            process_table[i].state = PROC_TERMINATED;
+            rq_remove(i);
+            printf("Proceso PID %d terminado.\n", PID);
+            break;
+        } else {
     // Paso 5. Si no se encontro, imprimir mensaje de error.
-
+           printf("No se encontro el PID %d", PID);
+        }
+    }
     // Paso 6. unblock_alarm() al terminar.
-
-    (void)arg;  // silence unused while unimplemented
+    unblock_alarm();
 }
 
 
@@ -337,6 +358,7 @@ static void cmd_kill_proc(const char *arg) {
 // ============================================================
 static void cmd_stats(void) {
     // Paso 1. block_alarm() para proteger la lectura.
+    block_alarm();
 
     // Paso 2. Declarar acumuladores:
     //         int active = 0, terminated = 0;
