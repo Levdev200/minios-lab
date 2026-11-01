@@ -426,7 +426,7 @@ void scheduler_sigchld(int signum) {
                 scheduler_active = 0;
             }
         } else {
-            q_remove(target_idx);
+            rq_remove(target_idx);
         }
     }
 }
