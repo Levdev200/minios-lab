@@ -365,20 +365,42 @@ void scheduler_tick(int signum) {
 void scheduler_sigchld(int signum) {
     (void)signum;
 
+    int status;
+    pid_t pid;
+
+
     // Paso 1. Loop while waitpid(-1, &status, WNOHANG | WUNTRACED) > 0:
     //         - WNOHANG para no bloquear.
     //         - El loop recoge todos los hijos terminados pendientes.
-
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
     // Paso 2. Dentro del loop, IGNORAR paradas: si !WIFEXITED(status) y
     //         !WIFSIGNALED(status), continue (el proceso solo se detuvo,
     //         no terminó).
-
+        if (!WIFEXITED(status) && !WIFSIGNALED(status)) {
+                continue;
+            }
     // Paso 3. Buscar el PID en process_table (loop por los process_count).
     //         Ignorar si ya está PROC_TERMINATED.
+        int target_idx = -1;
+        for (int i = 0; i < process_count; i++) {
+            if (process_table[i].pid == pid) {
+                if (process_table[i].state == PROC_TERMINATED) {
+                    break;
+                }
+                target_idx = i;
+                break;
+            }
+        }
+
+        if (target_idx == -1) {
+            continue;
+        }
+
 
     // Paso 4. Marcar process_table[i].state = PROC_TERMINATED y
     //         llamar monitor_emit_terminated(pid, cpu_time_ms, context_switches).
-
+        process_table[target_idx].state = PROC_TERMINATED;
+            monitor_emit_terminated(process_table[target_idx].pid, process_table[target_idx].cpu_time_ms, process_table[target_idx].context_switches);
     // Paso 5. Si i == current_running (el que terminó era el que corría):
     //         a) Actualizar cpu_time_ms con el elapsed desde last_started.
     //         b) current_running = -1;
@@ -389,4 +411,22 @@ void scheduler_sigchld(int signum) {
 
     // Paso 6. Si i != current_running (estaba en la cola esperando):
     //         rq_remove(i);
+
+        if (target_idx == current_running) {
+            current_running = -1;
+
+            if (!rq_is_empty()) {
+                int next_idx = rq_dequeue();
+                process_table[next_idx].state = PROC_RUNNING;
+                clock_gettime(CLOCK_MONOTONIC, &process_table[next_idx].last_started);
+                platform_resume_process(process_table[next_idx].pid);
+                current_running = next_idx;
+            } else {
+                timer_stop();
+                scheduler_active = 0;
+            }
+        } else {
+            q_remove(target_idx);
+        }
+    }
 }
