@@ -258,7 +258,7 @@ static void cmd_ps(void) {
     //         (recuerda hacer unblock_alarm antes de retornar!).
     if (process_count == 0)
     {
-        printf("No hay procesos");
+        printf("No hay procesos\n");
         unblock_alarm();
         return;
     }
@@ -302,7 +302,7 @@ static void cmd_kill_proc(const char *arg) {
 
     if (PID <= 0)
     {
-        printf("PID invalido");
+        printf("PID invalido\n");
         return;
     }
     
@@ -317,19 +317,26 @@ static void cmd_kill_proc(const char *arg) {
     //           e) imprimir "Proceso PID <pid> terminado."
     //           f) break;
     int status;
+    int encontrado = 0;
     for (int i = 0; i < process_count; i++) {
         if (process_table[i].pid == PID && process_table[i].state != PROC_TERMINATED) {
             kill(PID, SIGKILL);
             waitpid(PID, &status, 0);
             process_table[i].state = PROC_TERMINATED;
             rq_remove(i);
+            
+            encontrado = 1;
+
             printf("Proceso PID %d terminado.\n", PID);
             break;
-        } else {
-    // Paso 5. Si no se encontro, imprimir mensaje de error.
-           printf("No se encontro el PID %d", PID);
         }
     }
+    // Paso 5. Si no se encontro, imprimir mensaje de error.
+    if (encontrado == 0)
+    {
+        printf("No se encontro el PID %d\n", PID);
+    }
+    
     // Paso 6. unblock_alarm() al terminar.
     unblock_alarm();
 }

@@ -205,7 +205,7 @@ int scheduler_create_process(const char *path, const char *arg) {
     
     // Paso 8. waitpid(pid, &status, WUNTRACED) para confirmar que se detuvo.
     //         Si falla: perror, matar, retornar -1.
-    if (waitpid(pid, &status, WUNTRACED == -1)) {
+    if (waitpid(pid, &status, WUNTRACED) == -1) {
         perror("waitpid");
         kill(pid, SIGKILL);
         return -1;
